@@ -11,11 +11,12 @@ npts = 10 # number of points to find min/max over
 target_hr = 142 # heart rate waiting for to ignore little dips on decay
 min_t = 10 # minimum number of seconds between reps
 filter_hr = 130 # Ignore any data less than this bc its a rest period
-enforce_minima_consistency = True # Use recovery period as just time to target_hr, not to local minima. Works better for Tempos
+enforce_minima_consistency = False# Use recovery period as just time to target_hr, not to local minima. Works better for Tempos
 
 def process_file(file, make_plots=False):
 	base_name = file[:-4]
 	df = pd.read_csv(file, skiprows=2)
+	print(file)
 
 	#getting global mins
 	local_min_idx = argrelextrema(df["HR (bpm)"].values, np.less_equal, order=npts)[0]
@@ -50,9 +51,16 @@ def process_file(file, make_plots=False):
 			i = 0
 			while df.loc[lm-i,"HR (bpm)"] < mhr: i+=1
 			local_min_idx[idx] = lm - i
+
+	#drop maxes below target_hr
+	valid = df.loc[local_max_idx, "HR (bpm)"]>target_hr
+	local_max_idx = local_max_idx[valid]
+	local_min_idx = local_min_idx[valid]
+
+	# recalculate recovery times
 	recovery_times = local_min_idx - local_max_idx 
 
-
+	print(local_min_idx)
 	df['local_min_vals'] = df.iloc[local_min_idx]['HR (bpm)']
 	df['local_max_vals'] = df.iloc[local_max_idx]['HR (bpm)']
 
@@ -74,7 +82,7 @@ def process_file(file, make_plots=False):
 		plt.savefig(base_name+"_decaytime.pdf")
 		plt.clf()
 
-	max_hr = np.max(df["HR (bpm)"])
+	max_hr = df.loc[local_max_idx,"HR (bpm)"]
 
 	return (max_hr, recovery_times)
 
@@ -98,12 +106,14 @@ def main():
 
 	dates = np.array([datetime.strptime(fname.split('_')[2], "%Y-%m-%d") for fname in files])
 	med_recov = np.array([np.median(times[f]) for f in files])
-	max_hr = np.array([max_hr[f] for f in files])
+	global_max_hr = np.array([np.max(max_hr[f]) for f in files])
+	avg_max_hr = np.array([np.mean(max_hr[f]) for f in files])
 
 	sort = np.argsort(dates)
 	dates = dates[sort]
 	med_recov = med_recov[sort]
-	max_hr = max_hr[sort]
+	global_max_hr = global_max_hr[sort]
+	avg_max_hr = avg_max_hr[sort]
 
 
 	plt.plot(dates,med_recov,'o-')
@@ -112,11 +122,16 @@ def main():
 	plt.savefig(fdir+"recovery_agg.pdf")
 	plt.clf()
 
-	plt.plot(dates,max_hr,'o-')
+	plt.plot(dates,global_max_hr,'o-')
 	plt.xlabel("Date")
 	plt.ylabel("Max HR [bpm]")
 	plt.savefig(fdir+"max_hr.pdf")
+	plt.clf()
 
+	plt.plot(dates,avg_max_hr,'o-')
+	plt.xlabel("Date")
+	plt.ylabel("Average Interval HR  Max[bpm]")
+	plt.savefig(fdir+"max_hr.pdf")
 
 if __name__ == '__main__':
 	main()
