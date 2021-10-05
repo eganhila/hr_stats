@@ -81,8 +81,9 @@ def process_file(file, make_plots=False):
                 plt.clf()
 
         max_hr = df.loc[local_max_idx,"HR (bpm)"]
+        diff_hr = df.loc[local_max_idx,"HR (bpm)"].values -df.loc[local_min_idx,"HR (bpm)"].values
 
-        return (max_hr, recovery_times)
+        return (max_hr, recovery_times, diff_hr)
 
 def main():
         try: fdir = sys.argv[1]
@@ -91,10 +92,11 @@ def main():
         files = glob.glob(fdir+"*.csv")
         times = {}
         max_hr = {}
+        diff_hr = {}
+
 
         for file in files:
-                max_hr[file],times[file] = process_file(file,  make_plots=True)
-
+            max_hr[file],times[file], diff_hr[file] = process_file(file,  make_plots=True)
 
         dates = np.array([datetime.strptime(fname.split('_')[2], "%Y-%m-%d") for fname in files])
         med_recov = np.array([np.median(times[f]) for f in files])
@@ -110,10 +112,42 @@ def main():
 
         cmap = plt.get_cmap('Blues_r')
         for i,f in enumerate(files):
-                plt.plot(times[f],color=cmap(float(i)*0.8/len(files)))
+                plt.plot(times[f],color=cmap(float(i)*0.8/len(files)),label=dates[i])
         plt.xlabel("Rep")
         plt.ylabel("Recovery Time [s]")
+        plt.legend()
         plt.savefig(fdir+"recovery_indiv.pdf")
+        plt.clf()
+
+        for i,f in enumerate(files):
+            plt.hist(times[f],bins=np.linspace(0,100,50),label=dates[i])
+        plt.xlabel("Recovery Time [s]")
+        plt.legend()
+        plt.savefig(fdir+"recovery_indiv_hist.pdf")
+        plt.clf()
+
+
+        cmap = plt.get_cmap('Blues_r')
+        for i,f in enumerate(files):
+                plt.plot(60*diff_hr[f]/times[f],color=cmap(float(i)*0.8/len(files)),label=dates[i])
+        plt.xlabel("Rep")
+        plt.ylabel("HRR [beats/minute]")
+        plt.legend()
+        plt.savefig(fdir+"hrr_indiv.pdf")
+        plt.clf()
+
+        for i,f in enumerate(files):
+            plt.hist(60*diff_hr[f]/times[f],bins=np.linspace(0,120,50),label=dates[i],alpha=0.8)
+        plt.xlabel("HRR [beats/minute]")
+        plt.legend()
+        plt.savefig(fdir+"hrr_indiv_hist.pdf")
+        plt.clf()
+
+        plt.errorbar(dates,[np.median(60*diff_hr[f]/times[f]) for f in files],fmt='o-',
+                    yerr = [[np.median(60*diff_hr[f]/times[f])-np.quantile(60*diff_hr[f]/times[f],0.25) for f in files],
+                            [np.quantile(60*diff_hr[f]/times[f],0.75)-np.median(60*diff_hr[f]/times[f]) for f in files]])
+        plt.ylabel("HR Recovery Rate [beats/minute]")
+        plt.savefig(fdir+"hrr_indiv_time.png")
         plt.clf()
 
         plt.plot(dates,med_recov,'o-')
